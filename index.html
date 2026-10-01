@@ -549,7 +549,7 @@ function useLocal(){
   const sync=()=>{lib=a.slice().sort((x,y)=>y.at-x.at); renderLib()};
   const put=()=>{try{localStorage.setItem('fcr-lib',JSON.stringify(a))}catch{throw {code:'local'}} sync()};
   store={add:async d=>{a.push({...d,id:Math.random().toString(36).slice(2)}); put()},remove:async id=>{a=a.filter(x=>x.id!==id); put()}};
-  $('store-note').textContent='로그인 상태가 아니라 이 브라우저에만 저장됩니다.'; sync();
+  $('store-note').textContent='이 브라우저에 저장됩니다. 다른 기기나 다른 브라우저에서는 보이지 않습니다.'; sync();
 }
 (async()=>{
   const c=window.claude; if(!c?.use) return useLocal();
