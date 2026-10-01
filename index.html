@@ -1,0 +1,673 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>
+<title>원단 컬러 리더</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* Layout: app shell with a bottom tab bar (측정 / 배색 / 보관함). Photo sits on a neutral N5 surround like a color booth;
+   all chrome is achromatic on purpose so the only color on screen is the fabric. */
+:root{
+  --bg:#ececec; --panel:#f9f9f9; --ink:#191919; --muted:#636363; --line:#d3d3d3; --stage:#777777;
+  --good:#1f7a3d; --warn:#8f5400; --bad:#b3261e;
+  --sans:"IBM Plex Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1b1b1b;--panel:#252525;--ink:#ededed;--muted:#a3a3a3;--line:#3b3b3b;--stage:#4a4a4a;--good:#7fd69b;--warn:#f2b45a;--bad:#ff8a80;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#1b1b1b;--panel:#252525;--ink:#ededed;--muted:#a3a3a3;--line:#3b3b3b;--stage:#4a4a4a;--good:#7fd69b;--warn:#f2b45a;--bad:#ff8a80;color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--sans);padding-inline:16px;padding-block:18px calc(96px + env(safe-area-inset-bottom,0px))}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:16px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 16px}
+h1{margin:0;font-size:1.45rem;font-weight:700;letter-spacing:-.02em;line-height:1.2}
+h1 small{display:block;margin-bottom:4px;font:500 .68rem var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+h2{margin:0;font-size:1.05rem;font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip{font:500 .72rem/1 var(--mono);border:1px solid var(--line);border-radius:999px;padding:6px 10px;color:var(--muted);white-space:nowrap;background:none}
+.chip.on{color:var(--ink);border-color:var(--ink)}
+button.chip{cursor:pointer;color:var(--ink)}
+.lbl{font:500 .7rem var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.dim{color:var(--muted)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;display:grid;gap:12px;margin:0;min-width:0}
+.row{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}
+.btn{display:inline-flex;justify-content:center;align-items:center;gap:6px;font-weight:500;font-size:.95rem;padding:11px 14px;border-radius:8px;border:1px solid var(--ink);background:var(--ink);color:var(--bg);cursor:pointer;text-align:center}
+.btn.ghost{background:none;color:var(--ink);border-color:var(--line)}
+.btn.sm{font-size:.82rem;padding:6px 11px}
+.vh{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip-path:inset(50%)}
+.vh:focus-visible+label{outline:2px solid var(--ink);outline-offset:2px}
+
+/* measure */
+.mgrid{display:grid;gap:16px;grid-template-columns:minmax(0,1fr) 350px;align-items:start}
+@media (max-width:880px){.mgrid{grid-template-columns:minmax(0,1fr)}}
+.col{display:grid;gap:12px;min-width:0}
+.stage{background:var(--stage);border-radius:8px;padding:10px;display:grid;place-items:center;min-height:220px}
+.frame{position:relative;line-height:0}
+#cv{display:block;max-width:100%;max-height:68vh;cursor:crosshair;touch-action:manipulation}
+@media (max-width:880px){#cv{max-height:55vh}}
+.marker{position:absolute;aspect-ratio:1;min-width:10px;border-radius:50%;transform:translate(-50%,-50%);border:2px solid #fff;box-shadow:0 0 0 1px #000,inset 0 0 0 1px #000;pointer-events:none}
+.marker.ref{border-style:dashed}
+.hint{margin:0 2px;color:var(--muted);font-size:.87rem}
+.hint.err{color:var(--bad)}
+.pick{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pick>button{grid-column:1/-1}
+.cur{display:grid;grid-template-columns:88px minmax(0,1fr);gap:12px;align-items:stretch}
+.cur .swb .b{aspect-ratio:auto;height:100%;min-height:88px}
+.cur-t{display:grid;gap:3px;align-content:start;min-width:0}
+.nm{font-weight:700;font-size:1.05rem}
+.hexbig{font:500 1.35rem/1.1 var(--mono)}
+.acts{display:flex;flex-wrap:wrap;gap:6px}
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:8px;padding:3px;gap:3px}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{text-align:center;padding:8px;border-radius:6px;cursor:pointer;font-size:.9rem}
+.seg input:checked+label{background:var(--ink);color:var(--bg)}
+.seg input:focus-visible+label{outline:2px solid var(--ink);outline-offset:2px}
+.field{display:grid;gap:6px}
+select,input[type=text]{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:.92rem}
+input[type=range]{width:100%;accent-color:var(--ink)}
+
+/* swatches */
+.swb{display:grid;gap:4px;padding:0;background:none;border:0;cursor:pointer;text-align:left;font:500 .7rem/1.3 var(--mono);font-variant-numeric:tabular-nums;min-width:0;color:var(--ink)}
+.swb .b{display:block;aspect-ratio:1;border-radius:6px;border:1px solid var(--line)}
+.swb .l{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pal{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:10px 8px}
+.row5{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:8px}
+.strip{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.strip .swb{flex:0 0 40px}
+.de{font:500 .72rem/1.2 var(--mono);border:1px solid currentColor;border-radius:999px;padding:3px 8px;justify-self:start;width:max-content;max-width:100%}
+.de.good{color:var(--good)} .de.warn{color:var(--warn)} .de.bad{color:var(--bad)} .de.ref{color:var(--ink)}
+
+/* harmony */
+.base{display:grid;grid-template-columns:120px minmax(0,1fr);gap:14px;align-items:start}
+@media (max-width:420px){.base{grid-template-columns:90px minmax(0,1fr)}}
+.base .swb .b{aspect-ratio:1}
+.hsl{display:grid;gap:10px}
+.hsl .lbl output{color:var(--ink)}
+.hsl input[type=range]{-webkit-appearance:none;appearance:none;height:22px;border-radius:11px;background:var(--track);border:1px solid var(--line);margin:0}
+.hsl input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:#fff;border:2px solid #000;box-shadow:0 0 0 1px #fff}
+.hsl input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#fff;border:2px solid #000}
+.schemes{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr))}
+
+/* library */
+.list{list-style:none;margin:0;padding:0;display:grid}
+.list li{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.list li.p{grid-template-columns:minmax(0,1fr) auto}
+.t{display:grid;gap:3px;min-width:0;font-size:.9rem}
+.t .mono{font-size:.78rem;color:var(--muted);overflow-wrap:anywhere}
+.target{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;align-items:center}
+.empty{color:var(--muted);font-size:.9rem}
+.tips{display:grid;gap:8px;padding-top:6px;border-top:1px solid var(--line)}
+.tips ul{margin:0;padding-left:1.1em;display:grid;gap:4px;max-width:70ch;color:var(--muted);font-size:.9rem}
+.tips b{color:var(--ink);font-weight:500}
+
+/* shell */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;background:var(--panel);border-top:1px solid var(--line);padding:6px 16px calc(6px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center}
+.tabs .in{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;width:100%;max-width:520px}
+.tabs button{display:grid;justify-items:center;gap:2px;background:none;border:0;color:var(--muted);font-size:.75rem;font-weight:500;padding:6px;border-radius:8px;cursor:pointer}
+.tabs button[aria-selected=true]{color:var(--ink);background:var(--bg)}
+.tabs svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(78px + env(safe-area-inset-bottom,0px));z-index:20;background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:8px;font-size:.88rem;max-width:calc(100% - 32px)}
+dialog{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:0;width:100%;max-width:520px;max-height:90vh;border-radius:14px 14px 0 0;margin:auto auto 0;overflow:hidden}
+dialog[open]{display:grid;grid-template-rows:auto minmax(0,1fr)}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+@media (min-width:700px){dialog{margin:auto;border-radius:12px}}
+.s-sw{height:110px;border-bottom:1px solid var(--line)}
+.s-b{padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));display:grid;gap:12px;overflow:auto}
+.mrow{display:grid;grid-template-columns:62px minmax(0,1fr);gap:10px;text-align:left;background:none;border:0;border-top:1px solid var(--line);padding:8px 0;font:500 .9rem var(--mono);font-variant-numeric:tabular-nums;cursor:pointer;width:100%}
+.mrow span:first-child{color:var(--muted);font-size:.72rem;letter-spacing:.06em;align-self:center}
+/* live camera: full-screen, video cropped to fill; the ring marks exactly what is averaged */
+dialog.live{width:100%;height:100%;max-width:100%;max-height:100%;margin:0;border:0;border-radius:0;background:#000;color:#fff}
+dialog.live[open]{grid-template-rows:minmax(0,1fr) auto}
+.lv-stage{position:relative;overflow:hidden}
+.lv-stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.lv-ring{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #000,inset 0 0 0 1px #000;pointer-events:none}
+.lv-panel{background:var(--panel);color:var(--ink);padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));display:grid;gap:10px}
+.lv-read{display:grid;grid-template-columns:64px minmax(0,1fr);gap:12px;align-items:center}
+.lv-read .swb .b{aspect-ratio:1}
+.lv-acts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.lv-acts .btn{padding:9px 4px;font-size:.82rem}
+@media (prefers-reduced-motion:no-preference){.btn,.tabs button{transition:background .15s,color .15s}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1><small>Fabric color reader · CIELAB D65/2°</small>원단 컬러 리더</h1>
+    <div class="chips"><span class="chip" id="st-space"></span><span class="chip" id="st-cal"></span><button class="chip" id="uncal" hidden>보정 해제</button></div>
+  </header>
+
+  <!-- 측정 -->
+  <section class="view" id="v-measure">
+    <div class="mgrid">
+      <div class="col">
+        <div class="stage"><div class="frame">
+          <canvas id="cv" aria-label="측정할 사진. 탭한 위치의 색을 측정합니다."></canvas>
+          <div class="marker" id="mk" hidden></div>
+        </div></div>
+        <p class="hint" id="hint"></p>
+        <div class="pick">
+          <button class="btn" id="live-btn">실시간 카메라</button>
+          <input id="cam" class="vh" type="file" accept="image/*" capture="environment"><label class="btn ghost" for="cam">사진 촬영</label>
+          <input id="gal" class="vh" type="file" accept="image/*"><label class="btn ghost" for="gal">앨범에서 선택</label>
+        </div>
+      </div>
+
+      <div class="col">
+        <section class="panel cur" id="cur" hidden>
+          <button class="swb" id="cur-sw" aria-label="측정한 색 자세히 보기"><span class="b"></span></button>
+          <div class="cur-t">
+            <div class="nm" id="cur-name"></div>
+            <div class="hexbig" id="cur-hex"></div>
+            <div class="mono dim" id="cur-lab"></div>
+            <div id="cur-de"></div>
+            <div class="acts"><button class="btn sm" id="cur-save">저장</button><button class="btn ghost sm" id="cur-more">모든 값</button></div>
+          </div>
+        </section>
+        <p class="panel empty" id="cur-empty">사진에서 원단을 탭하면 측정값이 여기 나옵니다.</p>
+
+        <section class="panel">
+          <div class="row"><span class="lbl">이미지 대표색</span><button class="btn ghost sm" id="pal-save">팔레트 저장</button></div>
+          <div class="pal" id="pal"></div>
+        </section>
+
+        <section class="panel" id="recent-box" hidden>
+          <span class="lbl">최근 측정</span>
+          <div class="strip" id="recent"></div>
+        </section>
+
+        <section class="panel">
+          <div class="field"><span class="lbl">탭 동작</span>
+            <div class="seg"><input type="radio" name="mode" id="m-read" checked><label for="m-read">색상 측정</label><input type="radio" name="mode" id="m-ref"><label for="m-ref">기준 지정</label></div>
+          </div>
+          <label class="field"><span class="lbl">기준물</span>
+            <select id="reftype"><option value="white">흰 종이 · 색만 보정</option><option value="gray">18% 그레이카드 · 색+밝기 보정</option></select>
+          </label>
+          <label class="field"><span class="lbl">측정 영역 반지름 <output id="rad-v">20</output>px</span>
+            <input type="range" id="rad" min="3" max="60" value="20">
+          </label>
+        </section>
+      </div>
+    </div>
+
+    <section class="tips" style="margin-top:16px">
+      <h2>정확하게 찍는 법</h2>
+      <ul>
+        <li><b>조명</b> 흐린 날 창가 자연광이나 D65 표준광원 부스. 전구색 조명과 여러 조명이 섞인 곳은 피하세요.</li>
+        <li><b>기준물</b> 원단 옆에 흰 종이나 18% 그레이카드를 같이 찍고, ‘기준 지정’으로 한 번 탭하세요. 그레이카드는 밝기까지 맞춥니다.</li>
+        <li><b>촬영</b> 원단 정면에서 그림자와 광택 없이. 플래시, 필터, HDR은 끄세요. 화면을 찍지 말고 스크린샷을 불러오세요.</li>
+        <li><b>한계</b> 휴대폰 카메라는 측색기가 아닙니다. 보정해도 측색기 수준(ΔE 1 이하)은 어려우니 최종 승인은 측색기나 랩딥으로 확인하세요.</li>
+      </ul>
+    </section>
+  </section>
+
+  <!-- 배색 -->
+  <section class="view" id="v-harmony" hidden>
+    <div class="col">
+      <section class="panel base">
+        <button class="swb" id="h-sw" aria-label="기본색 자세히 보기"><span class="b"></span></button>
+        <div class="col">
+          <div class="nm" id="h-name"></div>
+          <label class="field"><span class="lbl">HEX 입력</span><input type="text" id="h-hex" inputmode="text" autocomplete="off" spellcheck="false" maxlength="7"></label>
+          <div class="hsl">
+            <label class="field"><span class="lbl">색상 H <output id="o-h"></output>°</span><input type="range" id="h-h" min="0" max="359"></label>
+            <label class="field"><span class="lbl">채도 S <output id="o-s"></output>%</span><input type="range" id="h-s" min="0" max="100"></label>
+            <label class="field"><span class="lbl">밝기 L <output id="o-l"></output>%</span><input type="range" id="h-l" min="0" max="100"></label>
+          </div>
+          <div class="acts"><button class="btn sm" id="h-save">이 색 저장</button></div>
+        </div>
+      </section>
+      <p class="hint">측정한 색의 ‘배색 보기’를 누르거나 HEX를 입력하면 기본색이 바뀝니다. 배색은 디자이너용 색상환(HSL) 기준입니다.</p>
+      <div class="schemes" id="schemes"></div>
+    </div>
+  </section>
+
+  <!-- 보관함 -->
+  <section class="view" id="v-library" hidden>
+    <div class="col">
+      <section class="panel" id="target-box"></section>
+      <section class="panel">
+        <div class="row"><span class="lbl">색상 · <span id="n-colors">0</span></span><button class="btn ghost sm" id="tsv">엑셀용 복사</button></div>
+        <ol class="list" id="lib-colors"></ol>
+      </section>
+      <section class="panel">
+        <span class="lbl">팔레트 · <span id="n-pals">0</span></span>
+        <ol class="list" id="lib-pals"></ol>
+      </section>
+      <p class="hint" id="store-note">보관함을 불러오는 중입니다.</p>
+    </div>
+  </section>
+</div>
+
+<nav class="tabs" role="tablist" aria-label="화면">
+  <div class="in">
+    <button role="tab" data-tab="measure" aria-selected="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg>측정</button>
+    <button role="tab" data-tab="harmony" aria-selected="false"><svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="5.5"/><circle cx="15" cy="9" r="5.5"/><circle cx="12" cy="15" r="5.5"/></svg>배색</button>
+    <button role="tab" data-tab="library" aria-selected="false"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10h14V9M10 13h4"/></svg>보관함</button>
+  </div>
+</nav>
+
+<dialog id="sheet" aria-labelledby="s-name">
+  <div class="s-sw" id="s-sw"></div>
+  <div class="s-b">
+    <div class="row"><div><div class="nm" id="s-name"></div><div class="dim" id="s-meta" style="font-size:.82rem"></div></div><button class="btn ghost sm" id="s-close">닫기</button></div>
+    <div id="s-de"></div>
+    <div><div class="lbl">값을 탭하면 복사됩니다</div><div id="s-models"></div></div>
+    <div class="acts"><button class="btn sm" id="s-save">보관함에 저장</button><button class="btn ghost sm" id="s-target">기준색으로</button><button class="btn ghost sm" id="s-harm">배색 보기</button></div>
+    <p class="dim" style="margin:0;font-size:.78rem">색 이름은 KS 계통색명 방식의 근사값입니다. CMYK는 인쇄 프로파일을 적용하지 않은 참고값입니다.</p>
+  </div>
+</dialog>
+<dialog id="live" class="live" aria-label="실시간 카메라">
+  <div class="lv-stage"><video id="lv" playsinline muted></video><div class="lv-ring" id="lv-ring"></div></div>
+  <div class="lv-panel">
+    <div class="lv-read">
+      <button class="swb" id="lv-sw" aria-label="지금 색 자세히 보기"><span class="b"></span></button>
+      <div class="t"><b id="lv-name">카메라를 켜는 중</b><span class="mono" id="lv-hex"></span><span class="dim" id="lv-cal" style="font-size:.78rem"></span><div id="lv-de"></div></div>
+    </div>
+    <div class="lv-acts">
+      <button class="btn ghost" id="lv-ref">기준 보정</button><button class="btn ghost" id="lv-save">저장</button><button class="btn" id="lv-cap">캡처</button><button class="btn ghost" id="lv-close">닫기</button>
+    </div>
+  </div>
+</dialog>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+// ---------- color math (linear light, D65) ----------
+const SRGB=[[0.4124564,0.3575761,0.1804375],[0.2126729,0.7151522,0.0721750],[0.0193339,0.1191920,0.9503041]];
+const P3=[[0.4865709,0.2656677,0.1982173],[0.2289746,0.6917385,0.0792869],[0,0.0451134,1.0439444]];
+const XYZ_SRGB=[[3.2404542,-1.5371385,-0.4985314],[-0.9692660,1.8760108,0.0415560],[0.0556434,-0.2040259,1.0572252]];
+const mul=(m,v)=>m.map(r=>r[0]*v[0]+r[1]*v[1]+r[2]*v[2]);
+const toLin=v=>v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4;
+const toGam=v=>v<=0.0031308?12.92*v:1.055*v**(1/2.4)-0.055;
+const LIN=Float64Array.from({length:256},(_,i)=>toLin(i/255));
+function lab([x,y,z]){ // CIELAB, D65 / 2°
+  const f=t=>t>216/24389?Math.cbrt(t):(24389/27*t+16)/116;
+  const fx=f(x/0.95047),fy=f(y),fz=f(z/1.08883);
+  return [116*fy-16,500*(fx-fy),200*(fy-fz)];
+}
+function dE00([L1,a1,b1],[L2,a2,b2]){ // CIEDE2000
+  const rad=Math.PI/180, C7=c=>c**7/(c**7+25**7);
+  const G=.5*(1-Math.sqrt(C7((Math.hypot(a1,b1)+Math.hypot(a2,b2))/2)));
+  const A1=a1*(1+G), A2=a2*(1+G), C1=Math.hypot(A1,b1), C2=Math.hypot(A2,b2);
+  const hue=(a,b)=>a===0&&b===0?0:(Math.atan2(b,a)/rad+360)%360, h1=hue(A1,b1), h2=hue(A2,b2);
+  let dh=0, hm=h1+h2;
+  if(C1*C2){dh=h2-h1; dh+=dh>180?-360:dh<-180?360:0; hm=Math.abs(h1-h2)<=180?hm/2:hm<360?(hm+360)/2:(hm-360)/2}
+  const dH=2*Math.sqrt(C1*C2)*Math.sin(dh*rad/2), Lm=(L1+L2)/2, Cm=(C1+C2)/2;
+  const T=1-.17*Math.cos((hm-30)*rad)+.24*Math.cos(2*hm*rad)+.32*Math.cos((3*hm+6)*rad)-.2*Math.cos((4*hm-63)*rad);
+  const SL=1+.015*(Lm-50)**2/Math.sqrt(20+(Lm-50)**2), SC=1+.045*Cm, SH=1+.015*Cm*T;
+  const RT=-Math.sin(60*Math.exp(-(((hm-275)/25)**2))*rad)*2*Math.sqrt(C7(Cm));
+  const l=(L2-L1)/SL, c=(C2-C1)/SC, h=dH/SH;
+  return Math.sqrt(l*l+c*c+h*h+RT*c*h);
+}
+function hsl([r,g,b]){
+  const mx=Math.max(r,g,b), mn=Math.min(r,g,b), d=mx-mn, l=(mx+mn)/2;
+  const h=d?(mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4)*60:0;
+  return [h, d?d/(1-Math.abs(2*l-1)):0, l];
+}
+function hslToRgb(h,s,l){const k=n=>(n+h/30)%12, a=s*Math.min(l,1-l); return [0,8,4].map(n=>l-a*Math.max(-1,Math.min(k(n)-3,9-k(n),1)))}
+
+// ponytail: rule-of-thumb KS 계통색명 from LCh; swap in the KS A 0011 관용색명 table or licensed Pantone TCX data when exact names matter
+const GRAY=L=>L>=92?'흰색':L>=72?'밝은 회색':L>=45?'회색':L>=22?'어두운 회색':'검정';
+const TINT={빨강:'붉은',주황:'주황빛',노랑:'누런',연두:'연둣빛',초록:'초록빛',청록:'청록빛',파랑:'푸른',보라:'보랏빛',자주:'자줏빛',분홍:'분홍빛'};
+function colorName([L,C,h]){
+  if(C<5) return GRAY(L);
+  if(L>=75&&C<=25&&h>=45&&h<115) return C<12&&L>=90?'아이보리':'베이지';
+  if(L<50&&h>=40&&h<105) return C<12?'회갈색':L<25?'어두운 갈색':'갈색';
+  let n=h<45?'빨강':h<75?'주황':h<105?'노랑':h<132?'연두':h<170?'초록':h<215?'청록':h<310?'파랑':h<340?'보라':'자주';
+  if(L>=65&&(h>=330||h<40)) n='분홍';
+  if(C<12) return TINT[n]+' '+GRAY(L);
+  if(n==='파랑'&&L<30) return '남색';
+  const m=L>=75?(C<25?'연한':'밝은'):L<35?(C>=35?'진한':'어두운'):C>=60?'선명한':C<20?'탁한':'';
+  return m?m+' '+n:n;
+}
+
+function color(xyz,meta={}){
+  const L=lab(xyz), s=mul(XYZ_SRGB,xyz), g=s.map(v=>toGam(Math.min(1,Math.max(0,v)))), rgb=g.map(v=>Math.round(v*255));
+  const lch=[L[0],Math.hypot(L[1],L[2]),(Math.atan2(L[2],L[1])*180/Math.PI+360)%360];
+  return Object.assign({xyz,lab:L,lch,g,rgb,name:colorName(lch),oog:s.some(v=>v<-.002||v>1.002),
+    hex:'#'+rgb.map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase()},meta);
+}
+const fromHex=h=>{const m=/^#?([0-9a-f]{6})$/i.exec(h.trim()); return m&&color(mul(SRGB,[0,2,4].map(i=>LIN[parseInt(m[1].substr(i,2),16)])))};
+const fromHsl=({h,s,l})=>color(mul(SRGB,hslToRgb(h,s,l).map(toLin)));
+function models(c){
+  const [r,g,b]=c.g, [h,s,l]=hsl(c.g), v=Math.max(r,g,b), sv=v?(v-Math.min(r,g,b))/v:0, k=1-v;
+  const p=x=>Math.round(x*100), f=x=>x.toFixed(1);
+  return [['HEX',c.hex],['RGB',c.rgb.join(', ')],['HSL',`${Math.round(h)}°, ${p(s)}%, ${p(l)}%`],['HSV',`${Math.round(h)}°, ${p(sv)}%, ${p(v)}%`],
+    ['CMYK',[r,g,b].map(x=>k<1?(1-x-k)/(1-k):0).concat(k).map(p).join(', ')],['Lab',c.lab.map(f).join(', ')],['LCh',`${f(c.lch[0])}, ${f(c.lch[1])}, ${Math.round(c.lch[2])}°`]];
+}
+// self-checks: sRGB red is Lab(53.24, 80.09, 67.20); Sharma et al. CIEDE2000 test pair 1 is 2.0425
+console.assert((l=>Math.abs(l[0]-53.24)<.05&&Math.abs(l[1]-80.09)<.1&&Math.abs(l[2]-67.20)<.1)(lab(mul(SRGB,[1,0,0]))),'Lab 변환 오류');
+console.assert(Math.abs(dE00([50,2.6772,-79.7751],[50,0,-82.7485])-2.0425)<1e-4,'ΔE2000 오류');
+
+// ---------- state ----------
+const $=id=>document.getElementById(id);
+const cv=$('cv'), ctx=cv.getContext('2d',{colorSpace:'display-p3',willReadFrequently:true});
+// iPhone and most recent Android photos are Display P3; reading through an sRGB canvas would clip saturated dyes.
+const CS=ctx.getContextAttributes?.().colorSpace==='display-p3'?'display-p3':'srgb', M=CS==='srgb'?SRGB:P3;
+const CAL={none:'미보정',white:'흰색 기준 보정',gray:'그레이카드 보정'};
+let gains=[1,1,1], cal='none', example=true, cur=null, recent=[], pal=[], lib=[], store=null, target=null, base={h:220,s:.4,l:.2}, sheetC=null;
+try{const t=JSON.parse(localStorage.getItem('fcr-target')); if(Array.isArray(t)&&t.length===3&&t.every(Number.isFinite)) target=color(t)}catch{}
+
+function el(tag,props={},...kids){
+  const e=document.createElement(tag);
+  for(const k in props){if(k==='text')e.textContent=props[k]; else if(k.startsWith('on'))e[k]=props[k]; else e.setAttribute(k,props[k])}
+  e.append(...kids.filter(k=>k!=null&&k!==false)); return e;
+}
+function paint(e,c){e.style.background=c.hex; e.style.background=`color(xyz-d65 ${c.xyz.map(v=>v.toFixed(5)).join(' ')})`}
+function swatch(c,...lines){
+  const b=el('button',{class:'swb','aria-label':`${c.name} ${c.hex} 자세히 보기`,onclick:()=>openSheet(c)},el('span',{class:'b'}),...lines.map(t=>el('span',{class:'l',text:t})));
+  paint(b.firstChild,c); return b;
+}
+const deInfo=d=>d<1?['good','거의 구분 안 됨']:d<2?['good','자세히 보면 차이']:d<3.5?['warn','차이가 보임']:['bad','확연히 다름'];
+function deChip(c){
+  if(!target) return null;
+  const d=dE00(target.lab,c.lab); if(d<.005) return el('span',{class:'de ref',text:'기준색'});
+  const [k,t]=deInfo(d); return el('span',{class:'de '+k,text:`ΔE00 ${d.toFixed(2)} · ${t}`});
+}
+let tt; function toast(m){const t=$('toast'); t.textContent=m; t.hidden=false; clearTimeout(tt); tt=setTimeout(()=>t.hidden=true,1900)}
+async function copy(text){try{await navigator.clipboard.writeText(text); toast('복사했습니다')}catch{toast('복사가 막혀 있습니다. 값을 길게 눌러 복사하세요.')}}
+const pack=xyz=>({x:+xyz[0].toFixed(6),y:+xyz[1].toFixed(6),z:+xyz[2].toFixed(6)});
+const unpack=o=>[o?.x,o?.y,o?.z];
+const okXYZ=v=>v.every(Number.isFinite);
+
+// ---------- photo + sampling ----------
+function setImage(src,w,h){
+  const s=Math.min(1,Math.sqrt(12e6/(w*h))); // ponytail: 12MP cap keeps iOS Safari under its canvas memory limit; tile the reads if full 24/48MP is ever needed
+  cv.width=Math.round(w*s); cv.height=Math.round(h*s);
+  ctx.drawImage(src,0,0,cv.width,cv.height);
+  gains=[1,1,1]; cal='none'; $('mk').hidden=true; status(); renderPalette();
+}
+function sample(cx,cy,r,c=ctx){
+  const x0=Math.max(0,Math.floor(cx-r)), y0=Math.max(0,Math.floor(cy-r));
+  const x1=Math.min(c.canvas.width,Math.ceil(cx+r)), y1=Math.min(c.canvas.height,Math.ceil(cy+r));
+  const w=x1-x0, d=c.getImageData(x0,y0,w,y1-y0).data, px=[];
+  for(let i=0;i<d.length;i+=4){
+    const x=x0+(i/4)%w+.5, y=y0+Math.floor(i/4/w)+.5;
+    if((x-cx)**2+(y-cy)**2<=r*r) px.push([LIN[d[i]],LIN[d[i+1]],LIN[d[i+2]]]);
+  }
+  // drop darkest and brightest 10%: weave shadows and sheen glints skew a plain mean
+  px.sort((a,b)=>a[0]+a[1]+a[2]-b[0]-b[1]-b[2]);
+  const k=Math.floor(px.length*.1), keep=px.slice(k,px.length-k);
+  return {lin:[0,1,2].map(c=>keep.reduce((s,p)=>s+p[c],0)/keep.length), n:keep.length};
+}
+function palette(k=6){
+  // k-means in Lab on a ~100px thumbnail; centers reported as the linear-light mean of each cluster
+  const s=Math.min(1,100/Math.max(cv.width,cv.height)), w=Math.max(1,Math.round(cv.width*s)), h=Math.max(1,Math.round(cv.height*s));
+  const t=el('canvas',{width:w,height:h}), tc=t.getContext('2d',{colorSpace:CS}); tc.drawImage(cv,0,0,w,h);
+  const d=tc.getImageData(0,0,w,h).data, px=[];
+  for(let i=0;i<d.length;i+=4){const xyz=mul(M,[0,1,2].map(c=>LIN[d[i+c]]*gains[c])); px.push({xyz,lab:lab(xyz)})}
+  let seed=7; const rnd=()=>(seed=seed*16807%2147483647)/2147483647; // fixed seed: same photo, same palette
+  const d2=(a,b)=>(a[0]-b[0])**2+(a[1]-b[1])**2+(a[2]-b[2])**2, cs=[px[Math.floor(rnd()*px.length)].lab];
+  while(cs.length<k){
+    const ds=px.map(p=>Math.min(...cs.map(c=>d2(p.lab,c)))), sum=ds.reduce((a,b)=>a+b,0); if(!sum) break;
+    let r=rnd()*sum, i=0; while((r-=ds[i])>0&&i<ds.length-1) i++; cs.push(px[i].lab);
+  }
+  let gs;
+  for(let it=0;it<12;it++){
+    gs=cs.map(()=>({n:0,lab:[0,0,0],xyz:[0,0,0]}));
+    for(const p of px){let bi=0,bd=Infinity; cs.forEach((c,j)=>{const v=d2(p.lab,c); if(v<bd){bd=v;bi=j}}); const g=gs[bi]; g.n++; for(let c=0;c<3;c++){g.lab[c]+=p.lab[c]; g.xyz[c]+=p.xyz[c]}}
+    gs.forEach((g,j)=>{if(g.n) cs[j]=g.lab.map(v=>v/g.n)});
+  }
+  return gs.filter(g=>g.n).sort((a,b)=>b.n-a.n).map(g=>({xyz:g.xyz.map(v=>v/g.n),share:g.n/px.length}));
+}
+
+const NOT_NEUTRAL='그 부분은 흰색이나 회색으로 보이지 않습니다. 흰 종이나 그레이카드에 맞춰 주세요.';
+function gainsFrom(lin,type){
+  if(Math.max(...lin)/Math.max(Math.min(...lin),1e-4)>4||Math.max(...lin)<0.01) return null;
+  const t=type==='gray'?0.18:mul(M,lin)[1]; // white paper: neutralize, keep its brightness. Gray card: also pin exposure to 18%.
+  return lin.map(c=>t/Math.max(c,1e-4));
+}
+function setRef(x,y,r){
+  const type=$('reftype').value, g=gainsFrom(sample(x,y,r).lin,type);
+  if(!g) return hint(NOT_NEUTRAL,true);
+  gains=g; cal=type; mark(x,y,r,true); $('m-read').checked=true; hint(); status(); renderPalette();
+}
+function addReading(x,y,r){
+  const {lin,n}=sample(x,y,r);
+  cur=color(mul(M,lin.map((v,i)=>v*gains[i])),{cal,src:'측정'});
+  cur.meta=`측정 · ${n}px 평균 · ${CAL[cal]}`+(cur.oog?' · sRGB 범위 밖이라 HEX는 근사값':'');
+  recent=[cur,...recent].slice(0,12);
+  mark(x,y,r,false); renderCur();
+}
+function mark(x,y,r,ref){
+  const m=$('mk'); m.hidden=false; m.className='marker'+(ref?' ref':'');
+  m.style.left=x/cv.width*100+'%'; m.style.top=y/cv.height*100+'%'; m.style.width=2*r/cv.width*100+'%';
+}
+
+// ---------- render ----------
+function status(){
+  $('st-space').textContent='색공간 '+(CS==='srgb'?'sRGB':'Display P3');
+  $('st-cal').textContent=CAL[cal]; $('st-cal').classList.toggle('on',cal!=='none'); $('uncal').hidden=cal==='none';
+}
+function hint(msg,err){
+  const h=$('hint');
+  h.textContent=msg||(example?'예시 사진입니다. 흰 종이로 보정한 뒤 남색 원단을 측정해 두었습니다. ':'')+
+    ($('m-ref').checked?'사진 속 흰 종이나 그레이카드를 탭하세요.':'측정할 곳을 탭하세요. 원 안의 픽셀을 평균냅니다.');
+  h.classList.toggle('err',!!err);
+}
+function renderCur(){
+  $('cur').hidden=!cur; $('cur-empty').hidden=!!cur;
+  if(cur){
+    paint($('cur-sw').firstChild,cur); $('cur-name').textContent=cur.name; $('cur-hex').textContent=cur.hex;
+    $('cur-lab').textContent='Lab '+cur.lab.map(v=>v.toFixed(1)).join(' / ');
+    $('cur-de').replaceChildren(...[deChip(cur)].filter(Boolean));
+  }
+  $('recent-box').hidden=recent.length<2;
+  $('recent').replaceChildren(...recent.map(c=>swatch(c)));
+}
+function renderPalette(){
+  pal=palette().map(p=>color(p.xyz,{share:p.share,src:'이미지 대표색',meta:`이미지 대표색 · 면적 ${Math.round(p.share*100)}% · ${CAL[cal]}`}));
+  $('pal').replaceChildren(...pal.map(c=>swatch(c,c.hex,Math.round(c.share*100)+'%')));
+}
+
+const SCHEMES=[
+  ['보색','색상환 반대편',b=>[0,180].map(d=>({...b,h:(b.h+d)%360}))],
+  ['유사색','양옆 30°',b=>[-30,0,30].map(d=>({...b,h:(b.h+d+360)%360}))],
+  ['삼각','120° 간격',b=>[0,120,240].map(d=>({...b,h:(b.h+d)%360}))],
+  ['분할 보색','보색 양옆 150°·210°',b=>[0,150,210].map(d=>({...b,h:(b.h+d)%360}))],
+  ['사각','90° 간격',b=>[0,90,180,270].map(d=>({...b,h:(b.h+d)%360}))],
+  ['단색','같은 색상, 밝기만 다르게',b=>[-.3,-.15,0,.15,.3].map(d=>({...b,l:Math.min(.95,Math.max(.05,b.l+d))}))],
+];
+function setBase(c){const [h,s,l]=hsl(c.g); base={h,s,l}; renderHarmony()}
+function renderHarmony(){
+  const b=fromHsl(base), H=Math.round(base.h), S=Math.round(base.s*100), L=Math.round(base.l*100);
+  paint($('h-sw').firstChild,b); $('h-name').textContent=b.name;
+  if(document.activeElement!==$('h-hex')) $('h-hex').value=b.hex;
+  [['h',H],['s',S],['l',L]].forEach(([k,v])=>{$('h-'+k).value=v; $('o-'+k).textContent=v});
+  $('h-h').style.setProperty('--track',`linear-gradient(90deg,${[0,60,120,180,240,300,360].map(x=>`hsl(${x},90%,50%)`)})`);
+  $('h-s').style.setProperty('--track',`linear-gradient(90deg,hsl(${H},0%,${L}%),hsl(${H},100%,${L}%))`);
+  $('h-l').style.setProperty('--track',`linear-gradient(90deg,#000,hsl(${H},${S}%,50%),#fff)`);
+  $('schemes').replaceChildren(...SCHEMES.map(([t,desc,f])=>{
+    const cs=f(base).map(x=>fromHsl(x));
+    cs.forEach(c=>{c.src='배색 · '+t; c.meta=`${t} 배색 · 기본색 ${b.hex}`});
+    return el('section',{class:'panel'},
+      el('div',{class:'row'},el('div',{},el('b',{text:t}),el('span',{class:'dim',text:' · '+desc})),
+        el('button',{class:'btn ghost sm',onclick:()=>save({kind:'palette',title:`${t} · ${b.hex}`,colors:cs.map(c=>pack(c.xyz))},'팔레트를 저장했습니다')},'저장')),
+      el('div',{class:'row5'},...cs.map(c=>swatch(c,c.hex))));
+  }));
+}
+
+function delBtn(id){
+  const b=el('button',{class:'btn ghost sm',text:'삭제'});
+  b.onclick=async()=>{ // two taps: confirm() is unavailable in the viewer
+    if(!b.dataset.armed){b.dataset.armed=1; b.textContent='한 번 더'; setTimeout(()=>{delete b.dataset.armed; b.textContent='삭제'},3000); return}
+    try{await store.remove(id); toast('삭제했습니다')}catch{toast('삭제하지 못했습니다')}
+  };
+  return b;
+}
+function renderTarget(){
+  const box=$('target-box');
+  if(!target) return box.replaceChildren(el('span',{class:'lbl',text:'기준색'}),el('p',{class:'empty',style:'margin:0',text:'색을 열고 ‘기준색으로’를 누르면, 측정하는 모든 색에 기준색과의 색차(ΔE00)가 표시됩니다. 원단 승인 색과 비교할 때 쓰세요.'}));
+  box.replaceChildren(el('span',{class:'lbl',text:'기준색'}),el('div',{class:'target'},swatch(target),
+    el('div',{class:'t'},el('b',{text:target.name}),el('span',{class:'mono dim',text:`${target.hex} · Lab ${target.lab.map(v=>v.toFixed(1)).join(' / ')}`})),
+    el('button',{class:'btn ghost sm',onclick:()=>setTarget(null)},'해제')));
+}
+function libColors(){return lib.filter(d=>d.kind==='color'&&okXYZ(unpack(d))).map(d=>({d,c:color(unpack(d),{src:d.src||'보관함',meta:`${d.src||'보관함'} · ${when(d.at)}`})}))}
+const when=t=>Number.isFinite(t)?new Date(t).toLocaleString('ko-KR',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+function renderLib(){
+  renderTarget();
+  const cs=libColors(), ps=lib.filter(d=>d.kind==='palette'&&Array.isArray(d.colors));
+  $('n-colors').textContent=cs.length; $('n-pals').textContent=ps.length;
+  $('lib-colors').replaceChildren(...cs.length?cs.map(({d,c})=>el('li',{},swatch(c),
+    el('div',{class:'t'},el('b',{text:c.name}),el('span',{class:'mono',text:`${c.hex} · Lab ${c.lab.map(v=>v.toFixed(1)).join(' / ')} · ${when(d.at)}`}),deChip(c)),
+    el('div',{class:'acts'},delBtn(d.id)))):[el('li',{class:'p'},el('span',{class:'empty',text:'아직 저장한 색이 없습니다. 측정한 색에서 ‘저장’을 누르세요.'}))]);
+  $('lib-pals').replaceChildren(...ps.length?ps.map(d=>{
+    const cs=d.colors.map(unpack).filter(okXYZ).map(x=>color(x,{src:'팔레트',meta:String(d.title||'팔레트')}));
+    return el('li',{class:'p'},el('div',{class:'t'},el('b',{text:String(d.title||'팔레트')}),el('span',{class:'mono',text:when(d.at)}),
+      el('div',{class:'row5',style:'margin-top:4px'},...cs.map(c=>swatch(c,c.hex)))),
+      el('div',{class:'acts',style:'flex-direction:column'},el('button',{class:'btn ghost sm',onclick:()=>copy(cs.map(c=>c.hex).join(', '))},'복사'),delBtn(d.id)));
+  }):[el('li',{class:'p'},el('span',{class:'empty',text:'저장한 팔레트가 없습니다. 이미지 대표색이나 배색에서 ‘저장’을 누르세요.'}))]);
+}
+function setTarget(c){
+  target=c&&color(c.xyz);
+  try{target?localStorage.setItem('fcr-target',JSON.stringify(target.xyz)):localStorage.removeItem('fcr-target')}catch{}
+  renderCur(); renderLib(); if($('sheet').open) openSheet(sheetC);
+  toast(target?'기준색으로 지정했습니다':'기준색을 해제했습니다');
+}
+function openSheet(c){
+  sheetC=c; paint($('s-sw'),c); $('s-name').textContent=c.name; $('s-meta').textContent=c.meta||'';
+  $('s-de').replaceChildren(...[deChip(c)].filter(Boolean));
+  $('s-models').replaceChildren(...models(c).map(([k,v])=>el('button',{class:'mrow',onclick:()=>copy(v)},el('span',{text:k}),el('span',{text:v}))));
+  if(!$('sheet').open) $('sheet').showModal();
+}
+function tab(name){
+  document.querySelectorAll('[role=tab]').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===name));
+  document.querySelectorAll('.view').forEach(v=>v.hidden=v.id!=='v-'+name);
+  if(name==='harmony') renderHarmony();
+  window.scrollTo(0,0);
+}
+
+// ---------- storage: claude.ai account (db) when signed in, else this browser ----------
+async function save(doc,msg){
+  if(!store) return toast('보관함을 준비하는 중입니다. 잠시 후 다시 눌러 주세요.');
+  try{await store.add({...doc,at:Date.now()}); toast(msg||'보관함에 저장했습니다')}
+  catch(e){toast(e?.code==='quota_exceeded'?'보관함이 가득 찼습니다. 안 쓰는 항목을 지워 주세요.':'저장하지 못했습니다. 이 페이지에 저장 권한이 있는지 확인해 주세요.')}
+}
+const saveColor=c=>save({kind:'color',...pack(c.xyz),src:c.src||'선택'});
+function useLocal(){
+  let a=[]; try{a=JSON.parse(localStorage.getItem('fcr-lib'))||[]}catch{}
+  const sync=()=>{lib=a.slice().sort((x,y)=>y.at-x.at); renderLib()};
+  const put=()=>{try{localStorage.setItem('fcr-lib',JSON.stringify(a))}catch{throw {code:'local'}} sync()};
+  store={add:async d=>{a.push({...d,id:Math.random().toString(36).slice(2)}); put()},remove:async id=>{a=a.filter(x=>x.id!==id); put()}};
+  $('store-note').textContent='로그인 상태가 아니라 이 브라우저에만 저장됩니다.'; sync();
+}
+(async()=>{
+  const c=window.claude; if(!c?.use) return useLocal();
+  const [db,user]=await Promise.all([c.use('db'),c.use('user')]);
+  const uid=db&&user?await user.id():null;
+  if(!uid) return useLocal();
+  const col=db.collection('data/users/'+uid);
+  store={add:d=>col.add(d),remove:id=>col.doc(id).delete()};
+  $('store-note').textContent='claude.ai 계정에 저장됩니다. 같은 계정이면 다른 기기에서도 보입니다.';
+  col.orderBy('at','desc').onSnapshot(s=>{lib=s.docs.map(d=>({...d.data(),id:d.id})); renderLib()},
+    ()=>{$('store-note').textContent='보관함 연결이 끊겼습니다. 페이지를 새로고침하세요.'});
+})();
+
+// ---------- live camera (needs a page the browser trusts with the camera; the Claude viewer refuses it) ----------
+let stream=null, raf=0, lastT=0, live=null, liveLin=null, liveGains=[1,1,1], liveCal='none';
+const lctx=el('canvas').getContext('2d',{colorSpace:CS,willReadFrequently:true});
+async function startLive(){
+  if(!navigator.mediaDevices?.getUserMedia) return toast('이 브라우저에서는 실시간 카메라를 쓸 수 없습니다. ‘사진 촬영’을 써 주세요.');
+  try{stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}})}
+  catch(e){return toast(window.top!==window?'이 화면 안에서는 카메라가 막혀 있습니다. GitHub 주소에서 열어 주세요.':
+    e?.name==='NotAllowedError'?'카메라 권한이 거부됐습니다. 브라우저 설정에서 이 사이트의 카메라를 허용해 주세요.':'카메라를 켤 수 없습니다. 다른 앱이 카메라를 쓰고 있는지 확인해 주세요.')}
+  const v=$('lv'); v.srcObject=stream; $('live').showModal();
+  try{await v.play()}catch{}
+  raf=requestAnimationFrame(liveTick);
+}
+function stopLive(){
+  cancelAnimationFrame(raf); stream?.getTracks().forEach(t=>t.stop()); stream=null; $('lv').srcObject=null;
+  if($('live').open) $('live').close();
+}
+function liveTick(t){
+  raf=requestAnimationFrame(liveTick);
+  const v=$('lv'), rad=+$('rad').value; $('lv-ring').style.width=$('lv-ring').style.height=2*rad+'px';
+  if(t-lastT<100||!v.videoWidth) return; lastT=t; // ~10 readings a second is plenty and spares the battery
+  const b=v.getBoundingClientRect(), sc=Math.max(b.width/v.videoWidth,b.height/v.videoHeight); // object-fit: cover scale
+  const r=Math.max(1,Math.round(rad/sc)), s=2*r;
+  lctx.canvas.width=lctx.canvas.height=s;
+  lctx.drawImage(v,v.videoWidth/2-r,v.videoHeight/2-r,s,s,0,0,s,s);
+  liveLin=sample(r,r,r,lctx).lin;
+  live=color(mul(M,liveLin.map((x,i)=>x*liveGains[i])),{src:'실시간',meta:`실시간 카메라 · ${CAL[liveCal]}`});
+  paint($('lv-sw').firstChild,live); $('lv-name').textContent=live.name; $('lv-hex').textContent=`${live.hex} · Lab ${live.lab.map(x=>x.toFixed(1)).join(' / ')}`;
+  $('lv-cal').textContent=liveCal==='none'?'미보정 · 카메라 자동 보정값 그대로입니다':CAL[liveCal]+' (조명이 바뀌면 다시 보정하세요)';
+  $('lv-de').replaceChildren(...[deChip(live)].filter(Boolean));
+}
+function liveRef(){
+  const type=$('reftype').value, g=liveLin&&gainsFrom(liveLin,type);
+  if(!g) return toast(NOT_NEUTRAL);
+  liveGains=g; liveCal=type; toast(CAL[type]+'을 적용했습니다');
+}
+function capture(){
+  const v=$('lv'), w=v.videoWidth, h=v.videoHeight; if(!w) return;
+  const c=el('canvas',{width:w,height:h}); c.getContext('2d',{colorSpace:CS}).drawImage(v,0,0);
+  stopLive(); example=false; cur=null; recent=[];
+  setImage(c,w,h);
+  if(liveCal!=='none'){gains=[...liveGains]; cal=liveCal; status(); renderPalette()} // same camera frame, so the live calibration still holds
+  renderCur(); hint('캡처한 화면입니다. 측정할 곳을 탭하세요. 흰 종이가 함께 찍혔다면 ‘기준 지정’으로 다시 보정할 수 있습니다.');
+}
+$('live-btn').onclick=startLive;
+$('lv-close').onclick=stopLive;
+$('live').addEventListener('close',stopLive); // Esc / back gesture
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&stream) stopLive()});
+$('lv-ref').onclick=liveRef;
+$('lv-save').onclick=()=>live&&saveColor(live);
+$('lv-cap').onclick=capture;
+$('lv-sw').onclick=()=>live&&openSheet(live);
+
+// ---------- events ----------
+cv.addEventListener('click',e=>{
+  const b=cv.getBoundingClientRect(), k=cv.width/b.width;
+  const x=(e.clientX-b.left)*k, y=(e.clientY-b.top)*k, r=Math.max(1,$('rad').value*k);
+  ($('m-ref').checked?setRef:addReading)(x,y,r);
+});
+async function loadFile(e){
+  const f=e.target.files[0]; if(!f) return;
+  const url=URL.createObjectURL(f);
+  try{
+    const img=new Image(); img.src=url; await img.decode();
+    if(example){example=false; cur=null; recent=[]}
+    setImage(img,img.naturalWidth,img.naturalHeight); renderCur(); hint();
+  }catch{hint('이 사진 형식을 열 수 없습니다. JPG나 PNG로 저장해서 다시 불러오세요.',true)}
+  finally{URL.revokeObjectURL(url); e.target.value=''}
+}
+$('cam').onchange=loadFile; $('gal').onchange=loadFile;
+document.querySelectorAll('[name=mode]').forEach(x=>x.onchange=()=>hint());
+$('rad').oninput=e=>$('rad-v').textContent=e.target.value;
+$('uncal').onclick=()=>{gains=[1,1,1]; cal='none'; $('mk').hidden=true; status(); renderPalette()};
+$('cur-sw').onclick=$('cur-more').onclick=()=>cur&&openSheet(cur);
+$('cur-save').onclick=()=>cur&&saveColor(cur);
+$('pal-save').onclick=()=>save({kind:'palette',title:'이미지 대표색',colors:pal.map(c=>pack(c.xyz))},'팔레트를 저장했습니다');
+['h','s','l'].forEach(k=>$('h-'+k).oninput=e=>{base[k]=k==='h'?+e.target.value:e.target.value/100; renderHarmony()});
+$('h-hex').onchange=e=>{const c=fromHex(e.target.value); c?setBase(c):toast('#1F2A44 같은 6자리 HEX로 입력하세요')};
+$('h-sw').onclick=()=>openSheet(Object.assign(fromHsl(base),{src:'배색 기본색',meta:'배색 기본색'}));
+$('h-save').onclick=()=>saveColor(Object.assign(fromHsl(base),{src:'배색'}));
+$('tsv').onclick=()=>copy(['이름\tHEX\tR\tG\tB\tL*\ta*\tb*\tC*\th°\tΔE00(기준색)\t저장 시각',...libColors().reverse().map(({d,c})=>
+  [c.name,c.hex,...c.rgb,...c.lab.map(v=>v.toFixed(2)),c.lch[1].toFixed(2),Math.round(c.lch[2]),target?dE00(target.lab,c.lab).toFixed(2):'',when(d.at)].join('\t'))].join('\n'));
+document.querySelectorAll('[role=tab]').forEach(b=>b.onclick=()=>tab(b.dataset.tab));
+$('s-close').onclick=()=>$('sheet').close();
+$('sheet').onclick=e=>{if(e.target===$('sheet')) $('sheet').close()};
+$('s-save').onclick=()=>saveColor(sheetC);
+$('s-target').onclick=()=>setTarget(sheetC);
+$('s-harm').onclick=()=>{setBase(sheetC); $('sheet').close(); tab('harmony')};
+
+// ---------- example photo: four woven swatches and a sheet of white paper under warm indoor light ----------
+(function example(){
+  const W=1200,H=800,o=el('canvas',{width:W,height:H});
+  const g=o.getContext('2d'), im=g.createImageData(W,H), d=im.data, cast=[1,.93,.78];
+  const areas=[[40,40,560,380,[31,42,68]],[600,40,1160,380,[122,31,43]],[40,420,560,760,[201,162,39]],[600,420,880,760,[138,154,123]],[920,420,1160,760,[242,242,242],1]];
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const a=areas.find(a=>x>=a[0]&&y>=a[1]&&x<a[2]&&y<a[3]), base=a?a[4]:[112,108,104];
+    const k=(a&&!a[5]?1+.14*Math.sin(x*1.1)*Math.sin(y*1.1):1)*(1+(Math.random()-.5)*.06), i=(y*W+x)*4;
+    for(let c=0;c<3;c++) d[i+c]=Math.round(toGam(Math.min(1,LIN[base[c]]*k*cast[c]))*255);
+    d[i+3]=255;
+  }
+  g.putImageData(im,0,0);
+  g.font='500 22px sans-serif'; g.fillStyle='#fff'; g.fillText('예시 사진 · 따뜻한 실내 조명',44,788);
+  g.fillStyle='#8a8070'; g.fillText('흰 종이',1000,740);
+  setImage(o,W,H);
+  setRef(1040,560,40); addReading(300,210,40); setBase(cur);
+  hint(); renderLib();
+})();
+</script>
+</body></html>
